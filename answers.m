@@ -262,18 +262,19 @@ Provide code to simulate the operation of a mark-scan garbage collector:
 
 > xscan :: heap -> num -> heap 
 > xscan (Heap blocks free_ptr) p = (Heap blocks free_ptr), if p >= #blocks
->                                = xscan new_heap_1 (p+1), if marked
+>                                = xscan new_heap_1 (p+1), if i > 0
 >                                = xscan new_heap_2 (p+1), otherwise 
 >                                  where
->                                  (Block (Header i n live size) children) = blocks ! p
->                                  unmarked_block = Block (Header ~marked live size) children 
+>                                  (Block (Header i n prev_block_info block_info) children) = blocks ! p
+>                                  unmarked_block = Block (Header 0 n prev_block_info block_info) children 
 >                                  new_heap_1 = replace p unmarked_block (Heap blocks free_ptr)
 >                                  new_heap_2 = free p (Heap blocks free_ptr)
 
 > scan :: heap -> heap
 > scan (Heap blocks free_ptr) = xscan (Heap blocks -1) 0
 
-
-> gc_malloc ::
+> gc_malloc :: num -> heap -> (heap, num)
+> gc_malloc n (Heap blocks free_ptr) = , if
+>                                    = , otherwise
 
 When a program starts running all of the free memory in the heap will exist in a single contiguous block       
