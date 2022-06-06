@@ -199,18 +199,65 @@ Provide code to simulate the operation of a mark-scan garbage collector:
 
 > header ::= Header num num (bool, num) (bool, num) || i-field n-field
 
-> xmark heap -> num -> heap
-> xmark my_heap p = my_heap, if marked 
->                 = foldl xmark new_heap children, otherwise 
->                   where
->                   (Block (Header marked live size) children) = my_heap ! p
->                   marked_block = Block (Header ~marked live size) children
->                   new_heap = replace p marked_block my_heap
+> get_i :: num -> heap -> num
+> get_i block (Heap blocks free_ptr) = i
+>                                      where
+>                                      (Block (Header i n prev_block_info block_info) children) = blocks ! block
 
+
+> set_i :: num -> num -> heap -> heap
+> set_i block new_i (Heap blocks free_ptr) = replace block (Block (Header new_i n prev_block_info block_info) children) (Heap blocks free_ptr)
+>                                            where
+>                                            (Block (Header old_i n prev_block_info block_info) children) = blocks ! block
+
+
+> get_n :: num -> heap -> num
+> get_n block (Heap blocks free_ptr) = n
+>                                      where
+>                                      (Block (Header i n prev_block_info block_info) children) = blocks ! block
+
+
+> get_ith_child :: num -> heap -> num
+> get_ith_child block (Heap blocks free_ptr) = children ! (i - 1)
+>                                              where
+>                                              (Block (Header i n prev_block_info block_info) children) = blocks ! block
+
+> set_ith_child :: num -> num -> heap -> heap
+> set_ith_child block value (Heap blocks free_ptr) = replace block replace_child_with_value (Heap blocks free_ptr)
+>                                                    where
+>                                                    (Block (Header i n prev_block_info block_info) children) = blocks ! block
+>                                                    replace_child_with_value = (Block (Header i n prev_block_info block_info) (replace_with_value (i - 1) children))
+>                                                    replace_with_value 0 x:xs = value:xs
+>                                                    replace_with_value (i+1) x:xs = x:(replace_with_value i xs)
+
+
+> unwind :: num -> num -> heap -> (num, num, heap)
+> unwind b f my_heap = (f, tmp, new_heap)
+>                      where
+>                      tmp = get_ith_child f my_heap
+>                      new_heap = set_ith_child f b my_heap 
+
+
+> rewind :: num -> num -> heap -> (num, num, heap)
+> rewind b f my_heap = (tmp, b, new_heap)
+>                      where
+>                      tmp = get_ith_child b my_heap 
+>                      new_heap = set_ith_child b f my_heap
+
+
+> xmark :: num -> heap -> num -> heap
+> xmark b f my_heap = my_heap, if f = -1
+>                   = xmark new_b new_heap new_f
+>                     where
+>                     i = get_i f my_heap
+>                     n = get_n f my_heap
+>                     increment_i = set_i f (i+1) my_heap
+>                     (new_b, new_f, new_heap) = rewind b f increment_i, if i > n
+>                                              = unwind b f increment_i, otherwise
 
 
 > mark :: [num] -> heap -> heap
-> mark root_set my_heap = foldl xmark my_heap root_set
+> mark root_set my_heap = foldl (converse (xmark (-1))) my_heap root_set 
 
 
 > xscan :: heap -> num -> heap 
@@ -218,7 +265,7 @@ Provide code to simulate the operation of a mark-scan garbage collector:
 >                                = xscan new_heap_1 (p+1), if marked
 >                                = xscan new_heap_2 (p+1), otherwise 
 >                                  where
->                                  (Block (Header marked live size) children) = blocks ! p
+>                                  (Block (Header i n live size) children) = blocks ! p
 >                                  unmarked_block = Block (Header ~marked live size) children 
 >                                  new_heap_1 = replace p unmarked_block (Heap blocks free_ptr)
 >                                  new_heap_2 = free p (Heap blocks free_ptr)
