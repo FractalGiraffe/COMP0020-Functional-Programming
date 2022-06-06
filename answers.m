@@ -12,206 +12,221 @@ Each free block holds in its data area a pointer to the header of the next free 
 
 Assume there is a maximum limit to the block size that can be requested, so we know how many bits are needed in the block header to represent that size. Sizes may be counted in terms of bytes or words – it is most convenient if the thing being counted is the same as what is meant by the argument n to malloc – assume we are counting bytes
 
-A 16-bit signed integer can provide availability using the sign bit (positive numbers are live, negative numbers are free) and size (the absolute value of the number). Two 16-bit signed integers can be held in a 4-byte header
+Assume a block header is:
 
-Assume a block header is 4 bytes:
-
- -  2 bytes to represent block size and availability of previous block
- -  2 bytes to represent block size and availability of this block
+ -  mark flag of this block
+ -  live flag and size of previous block
+ -  live flag and size of this block
 
 > header_size = 4
 
-A pointer is a 32 bit signed since here 0 is a valid memory address, so we can use -1 as the NULL pointer
+A pointer is typically 4 bytes. Since here 0 is a valid memory address, so we can use -1 as the NULL pointer
 
 > min_block_size = 4
 
-The heap is modelled as a two-tuple comprising an area of memory, modelled as a list of char (byte), and the value for the Free List Pointer. The lowest memory address is the head of the list and the highest memory address is the tail of the list. 
 
-We use a byte-addressable scheme and big-endian byte order
+> header ::= Header bool (bool, num) (bool, num)
+> children ::= [num] || set of pointers contained in data area
+> block ::= Block header children
+> free_ptr ::= num
+> heap ::= Heap [block] free_ptr
 
-> heap == ([char], num)
 
-Write writes an arbitrary number of bytes to the heap
-
-> write :: [char] -> num -> heap -> heap 
-> write bytes ptr (h, free_ptr) = error "seg fault", if ptr < 0 \/ ptr + #bytes - 1 >= #h  
->                               = ((write_ bytes ptr h), free_ptr), otherwise
->                                 where 
->                                 write_ [] ptr old_heap     = old_heap
->                                 write_ (x:xs) 0 (y:ys)     = x:(write_ xs 0 ys)
->                                 write_ bytes ptr (y:ys)    = y:(write_ bytes (ptr-1) ys)
-
-My_read reads an arbitrary number of bytes from the heap
-
-> my_read :: heap -> num -> num -> [char]
-> my_read (h, free_ptr) ptr num_bytes = error "seg fault", if ptr < 0 \/ ptr + num_bytes - 1 >= #h
->                                     = xread h ptr (ptr + num_bytes - 1) [], otherwise
->                                       where
->                                       xread h start current result = result, if current < start
->                                                                    = xread h start (current - 1) (h ! current : result), otherwise
-
-Encode encodes an integer in two's complement with a given bit width 
-
-> encode :: num -> num -> [char]
-> encode n width = error "width must be greater than zero", if width = 0
->                = error "data must be naturally aligned", if width mod 8 ~= 0
->                = error "width is too small to represent n", if n > 2^(width-1) - 1 \/ n < -2^(width-1)
->                = xencode (n + 2^width) (width div 8) 0 [], if n < 0
->                = xencode n (width div 8) 0 [], otherwise 
->                  where
->                  xencode n total_bytes byte_number encoded_n = encoded_n, if byte_number = total_bytes
->                                                              = xencode n total_bytes (byte_number + 1) (decode ((n div 2^(8 * byte_number)) mod 2^8) : encoded_n), otherwise
-
-Decode_ decodes a byte string to an integer
-
-> decode_ :: [char] -> num -> num
-> decode_ encoded_n width = error "width must be greater than zero", if width = 0
->                         = error "data must be naturally aligned", if width mod 8 ~= 0
->                         = error "promotion is not supported", if #encoded_n < width / 8
->                         = to_signed (xdecode_ encoded_n (width div 8) 0 0), otherwise
->                           where xdecode_ encoded_n total_bytes char_index decoded_n = decoded_n, if char_index = total_bytes
->                                                                                     = xdecode_ encoded_n total_bytes (char_index + 1) (decoded_n + (code (encoded_n ! char_index))*2^(width - 8 - 8*char_index)), otherwise
->
->                                 to_signed n = n - 2^width, if n div 2^(width - 1) = 1
->                                             = n, otherwise
-
-> write_int16 :: num -> num -> heap -> heap
-> write_int16 n ptr my_heap = write (encode n 16) ptr my_heap
-
-> read_int16 :: heap -> num -> num
-> read_int16 my_heap ptr = decode_ (my_read my_heap ptr 2) 16
-
-> write_int32 :: num -> num -> heap -> heap
-> write_int32 n ptr my_heap = write (encode n 32) ptr my_heap
-
-> read_int32 :: heap -> num -> num
-> read_int32 my_heap ptr = decode_ (my_read my_heap ptr 4) 32 
+> replace :: num -> block -> heap -> heap
+> replace p block (Heap blocks free_ptr) = error "seg fault", if p < 0 \/ p >= #blocks
+>                                        = Heap (replace_with_block p blocks) free_ptr, otherwise
+>                                          where
+>                                          replace_with_block 0 (x:xs)       = block:xs
+>                                          replace_with_block (p+1) (x:xs)   = x:(replace_with_block p block xs)
 
 
 > get_block_size :: num -> heap -> num
-> get_block_size block my_heap = abs (read_int16 my_heap (block - header_size div 2))
+> get_block_size p (Heap blocks free_ptr) = size
+>                                           where
+>                                           (Block (Header marked prev_block_info (live, size)) children) = blocks ! p
 
 > get_prev_block_size :: num -> heap -> num
-> get_prev_block_size block my_heap = get_block_size (block - header_size div 2) my_heap
+> get_block_size p (Heap blocks free_ptr) = size
+>                                           where
+>                                           (Block (Header marked (live, size) block_info) children) = blocks ! p
 
 > set_block_size :: num -> num -> heap -> heap
-> set_block_size block block_size my_heap = write_int16 block_size (block - header_size div 2) my_heap 
+> set_block_size p new_size (Heap blocks free_ptr) = replace p (Block (Header marked prev_block_info (live, new_size)) children) (Heap blocks free_ptr)
+>                                                    where
+>                                                    (Block (Header marked prev_block_info (live, old_size)) children) = blocks ! p 
 
 > set_prev_block_size :: num -> num -> heap -> heap
-> set_prev_block_size block prev_block_size my_heap = set_block_size (block - header_size div 2) prev_block_size my_heap 
+> set_prev_block_size p new_size (Heap blocks free_ptr) = replace p (Block (Header marked (live, new_size) block_info) children) (Heap blocks free_ptr)
+>                                                         where
+>                                                         (Block (Header marked (live, old_size) block_info) children) = blocks ! p
 
 > get_next_free_block :: num -> heap -> num
-> get_next_free_block free_block my_heap = read_int32 my_heap free_block
+> get_next_free_block p (Heap blocks free_ptr) = next_free_block
+>                                                where
+>                                                (Block header [next_free_block]) = blocks ! p
 
 > set_next_free_block :: num -> num -> heap -> heap
-> set_next_free_block free_block next_free_block my_heap = write_int32 next_free_block free_block my_heap
+> set_next_free_block p next_free_block (Heap blocks free_ptr) = replace p (Block header [next_free_block]) (Heap blocks free_ptr)
+>                                                                where
+>                                                                (Block header children) = blocks ! p
 
-> is_free :: num -> heap -> bool
-> is_free block my_heap = block_size < 0
->                         where
->                         block_size = read_int16 my_heap (block - header_size div 2)
+> is_live :: num -> heap -> bool
+> is_live block (Heap blocks free_ptr) = live
+>                                        where
+>                                        (Block (Header marked prev_block_info (live, size)) children) = blocks ! block
+
+> set_liveness :: num -> bool -> heap -> heap
+> set_liveness block live (Heap blocks free_ptr) = replace block (Block (Header marked prev_block_info (live, size)) children) (Heap blocks free_ptr)
+>                                                  where
+>                                                  (Block (Header marked prev_block_info (was_live, size)) children) = blocks ! block
 
 > first_fit :: num -> heap -> (num, num)
-> first_fit n (h, -1)       = error "out of memory"  
-> first_fit n (h, free_ptr) = (free_block, free_block_size), if n <= free_block_size
->                           = first_fit n (h, next_free_block), otherwise
->                             where
->                             free_block = free_ptr + header_size
->                             free_block_size = get_block_size free_block (h, free_ptr)
->                             next_free_block = get_next_free_block free_block (h, free_ptr)
-
-
-> change_liveness :: num -> heap -> heap
-> change_liveness block my_heap = set_block_size block (- block_size) my_heap
->                                 where
->                                 block_size = get_block_size block my_heap                              
-
+> first_fit n (Heap blocks -1)        = error "out of memory"
+> first_fit n (Heap blocks free_ptr)  = (free_ptr, free_block_size), if n <= free_block_size
+>                                     = first_fit n (Heap blocks next_free), otherwise
+>                                       where
+>                                       free_block_size = get_block_size free_ptr (Heap blocks free_ptr)
+>                                       next_free = get_next_free_block free_ptr (Heap blocks free_ptr)
 
 > insert_into_free_list :: num -> heap -> heap
-> insert_into_free_list block (h, free_ptr) = set_next_free_block block free_ptr (h, block), if block < free_ptr
->                                           = restructure_free_list block (h, free_ptr) free_ptr, otherwise
->                                             where
->                                             restructure_free_list block (h, free_ptr) free_block = set_next_free_block free_block block new_heap, if block < next_free_block
->                                                                                                  = restructure_free_list block (h, free_ptr) next_free_block, otherwise
->                                                                                                    where
->                                                                                                    next_free_block = get_next_free_block free_block (h, free_ptr)
->                                                                                                    new_heap        = set_next_free_block block next_free_block (h, free_ptr)
+> insert_into_free_list block (Heap blocks free_ptr) = set_next_free_block block free_ptr (Heap blocks block), if block < free_ptr
+>                                                    = restructure_free_list free_ptr, otherwise
+>                                                      where
+>                                                      restructure_free_list free_block = set_next_free_block free_block block new_heap, if block < next_free_block
+>                                                                                   = restructure_free_list next_free_block, otherwise
+>                                                                                     where
+>                                                                                     next_free_block = get_next_free_block free_block (Heap blocks free_ptr)
+>                                                                                     new_heap  = set_next_free_block block next_free_block (Heap blocks free_ptr)
 
 
 > remove_from_free_list :: num -> heap -> heap
-> remove_from_free_list block (h, free_ptr) = (h, get_next_free_block block (h, free_ptr)), if block = free_ptr
->                                           = restructure_free_list block (h, free_ptr) free_ptr, otherwise
->                                             where
->                                             restructure_free_list block (h, free_ptr) free_block = set_next_free_block free_block free_block_after_next (h, free_ptr), if next_free_block = block
->                                                                                                  =  restructure_free_list block (h, free_ptr) next_free_block, otherwise
->                                                                                                     where
->                                                                                                     next_free_block = get_next_free_block free_block (h, free_ptr)                                                                                        
->                                                                                                     free_block_after_next = get_next_free_block block (h, free_ptr)
+> remove_from_free_list block (Heap blocks free_ptr) = (Heap blocks (get_next_free_block block (Heap blocks free_ptr))), if block = free_ptr
+>                                                    = restructure_free_list free_ptr, otherwise
+>                                                      where
+>                                                      restructure_free_list free_block = set_next_free_block free_block free_block_after_next (Heap blocks free_ptr), if next_free_block = block
+>                                                                                       = restructure_free_list next_free_block, otherwise
+>                                                                                         where
+>                                                                                         next_free_block = get_next_free_block free_block (Heap blocks free_ptr)                                                                                        
+>                                                                                         free_block_after_next = get_next_free_block block (Heap blocks free_ptr)
 
 
 > sync :: num -> heap -> heap
-> sync block my_heap = set_prev_block_size next_block block_size my_heap
+> sync block my_heap = set_block_size next_block size (set_liveness next_block live my_heap) 
 >                      where
->                      block_size = get_block_size block my_heap
->                      next_block = block + block_size + header_size
+>                      size = get_block_size block my_heap
+>                      live = is_live block my_heap
+>                      next_block = block + 1 
 
-
-> split :: num -> num -> num -> heap -> (heap, num)
-> split block n k my_heap = (heap_with_synchronized_blocks, new_block) 
->                           where
->                           new_block = block + n + header_size
->                           heap_with_part_new_block_header = set_block_size new_block (-(k - header_size)) my_heap
->                           heap_with_synchronized_new_block = sync new_block heap_with_part_new_block_header
->                           heap_with_updated_block_header = set_block_size block n heap_with_synchronized_new_block
->                           heap_with_synchronized_blocks = sync block heap_with_updated_block_header
+> split :: num -> num -> num -> heap -> heap
+> split block n k (Heap blocks free_ptr) = set_block_size block n heap_with_part_synchronized_new_block 
+>                                          where
+>                                          new_block = Block (Header False (False, n) (False, k - header_size)) []
+>                                          ptr_to_new_block = block + 1
+>
+>                                          insert_new_block_into_heap 0 remaining_blocks = new_block:remaining_blocks
+>                                          insert_new_block_into_heap (p+1) block:blocks = block:(insert_new_block_into_heap p blocks)  
+> 
+>                                          heap_with_new_block = (Heap (insert_new_block_into_heap ptr_to_new_block blocks) free_ptr)
+>                                          heap_with_part_synchronized_new_block = sync ptr_to_new_block heap_with_new_block
 
 Malloc takes a variable block size in bytes and a heap and returns a two-tuple of the new heap after allocation and the returned pointer into the new heap using the First-fit allocation policy as it's easiest to code:
 
 > malloc :: num -> heap -> (heap, num)
-> malloc n my_heap = (new_heap, allocated_block)
+> malloc n my_heap = (synchronize_allocated_block, allocated_block)
 >                    where
 >                    (allocated_block, y)  = first_fit (max [min_block_size, n]) my_heap
 >                    restructured_heap     = remove_from_free_list allocated_block my_heap, if k < header_size + min_block_size  
->                                          = split_allocated_block_restructure_heap, otherwise
+>                                          = split_allocated_block_and_restructure_heap, otherwise
 >                                            where
->                                            k = y - n 
->                                            (heap_after_split, new_block) = split allocated_block n k my_heap
->                                            insert_new_block_into_free_list = insert_into_free_list new_block heap_after_split
->                                            split_allocated_block_restructure_heap = remove_from_free_list allocated_block insert_new_block_into_free_list  
->                    restructured_heap_with_live_allocated_block = change_liveness allocated_block restructured_heap
->                    new_heap = sync allocated_block restructured_heap_with_live_allocated_block
+>                                            k = y - n
+>                                            new_block = allocated_block + 1 
+>                                            split_allocated_block = split allocated_block n k my_heap
+>                                            insert_new_block_into_free_list = insert_into_free_list new_block split_allocated_block
+>                                            split_allocated_block_and_restructure_heap = remove_from_free_list allocated_block insert_new_block_into_free_list  
+>                    set_allocated_block_to_live = set_liveness allocated_block True restructured_heap
+>                    synchronize_allocated_block = sync allocated_block set_allocated_block_to_live
+
+
+> remove_from_heap :: num -> heap -> heap
+> remove_from_heap block (Heap blocks free_ptr) = (Heap (remove block blocks) free_ptr)
+>                                                 where
+>                                                 remove 0 remaining_blocks = remaining_blocks
+>                                                 remove (p+1) block:blocks = block:(remove p blocks)  
 
 
 > merge_with_prev :: num -> heap -> (heap, num)
-> merge_with_prev block my_heap = (heap_with_synchronized_blocks, prev_block), if is_free prev_block my_heap  
->                               = (my_heap, block), otherwise
+> merge_with_prev block my_heap = (my_heap, block), if is_live prev_block my_heap
+>                               = (synchronize_prev_block, prev_block), otherwise  
 >                                 where
 >                                 block_size = get_block_size block my_heap
 >                                 prev_block_size = get_prev_block_size block my_heap
->                                 prev_block = block - header_size - prev_block_size 
->                                 heap_with_updated_prev_block_header = set_block_size prev_block (prev_block_size + header_size + block_size) my_heap 
->                                 heap_with_synchronized_blocks = sync prev_block heap_with_updated_prev_block_header 
+>                                 prev_block = block - 1
+>                                 resize_prev_block = set_block_size prev_block (prev_block_size + header_size + block_size) my_heap 
+>                                 restructure_heap = remove_from_heap block resize_prev_block
+>                                 synchronize_prev_block = sync prev_block restructure_heap 
 
 
 > merge_with_next :: num -> heap -> heap
-> merge_with_next block my_heap = heap_with_synchronized_blocks, if is_free next_block my_heap
->                               = my_heap, otherwise
+> merge_with_next block my_heap = my_heap, if is_live next_block my_heap 
+>                               = synchronize_block, otherwise
 >                                 where
 >                                 block_size = get_block_size block my_heap
->                                 next_block = block + block_size + header_size
+>                                 next_block = block + 1
 >                                 next_block_size = get_block_size next_block my_heap 
->                                 heap_with_updated_block_header = set_block_size block (block_size + header_size + next_block_size) my_heap
->                                 heap_with_synchronized_blocks = sync block heap_with_updated_block_header 
+>                                 resize_block = set_block_size block (block_size + header_size + next_block_size) my_heap
+>                                 restructure_free_list = remove_from_free_list next_block resize_block 
+>                                 restructure_heap = remove_from_heap next_block restructure_free_list 
+>                                 synchronize_block = sync block restructure_heap 
 
 
 Free frees memory according to an AO ordering policy, so the free block with the lowest address is considered first for allocation, which clusters live blocks at lower memory addresses thereby improving virtual memory performance
 
 > free :: num -> heap -> heap
 > free block my_heap = my_heap, if block = -1
->                    = change_liveness block restructured_heap, otherwise
->                      where                      
->                      restructured_heap = insert_into_free_list block my_heap
->                       
+>                    = synchronize_block, otherwise
+>                      where
+>                      (heap_after_merge_with_prev, new_block)  = merge_with_prev block my_heap
+>                      heap_after_merge_with_next = merge_with_next new_block heap_after_merge_with_prev  
+>             
+>                      restructure_heap = heap_after_merge_with_next, if block ~= new_block
+>                                       = insert_into_free_list block heap_after_merge_with_next, otherwise
+>
+>                      set_freed_block_to_free = set_liveness new_block False restructure_heap
+>                      synchronize_block = sync new_block set_freed_block_to_free
 
 
-When a program starts running all of the free memory in the heap will exist in a single contiguous block
+Provide code to simulate the operation of a mark-scan garbage collector:
+
+> header ::= Header num num (bool, num) (bool, num) || i-field n-field
+
+> xmark heap -> num -> heap
+> xmark my_heap p = my_heap, if marked 
+>                 = foldl xmark new_heap children, otherwise 
+>                   where
+>                   (Block (Header marked live size) children) = my_heap ! p
+>                   marked_block = Block (Header ~marked live size) children
+>                   new_heap = replace p marked_block my_heap
+
+
+
+> mark :: [num] -> heap -> heap
+> mark root_set my_heap = foldl xmark my_heap root_set
+
+
+> xscan :: heap -> num -> heap 
+> xscan (Heap blocks free_ptr) p = (Heap blocks free_ptr), if p >= #blocks
+>                                = xscan new_heap_1 (p+1), if marked
+>                                = xscan new_heap_2 (p+1), otherwise 
+>                                  where
+>                                  (Block (Header marked live size) children) = blocks ! p
+>                                  unmarked_block = Block (Header ~marked live size) children 
+>                                  new_heap_1 = replace p unmarked_block (Heap blocks free_ptr)
+>                                  new_heap_2 = free p (Heap blocks free_ptr)
+
+> scan :: heap -> heap
+> scan (Heap blocks free_ptr) = xscan (Heap blocks -1) 0
+
+
+> gc_malloc ::
+
+When a program starts running all of the free memory in the heap will exist in a single contiguous block       
