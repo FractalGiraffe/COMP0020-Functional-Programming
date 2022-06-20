@@ -1,40 +1,189 @@
 >|| Answer Sheet
 
+
+Question 1.
+
+Consider the following Miranda function definitions that represent natural numbers as functions:
+
+> zero  f x = x
+> one   f x = f x
+> two   f x = f (f x)
+> three f x = f (f (f x))
+> four  f x = f (f (f (f x)))
+
+
+1a.
+ 
+'plus' function takes two church numerals and returns a function representation of the result of adding them  
+
+> plus n m f = (n f) . (m f) 
+
+1b. 
+
+'times' function takes two church numerals and returns a function representation of the result of multiplying them
+
+> times n m f = (n . m) f 
+
+1c.
+
+In the context of Church numerals, n is assumed to be a Church numeral and f9 is a decrement function on church numerals, i.e., when applied to a Church numeral it diminishes it by one, f9 n = n-1.
+
+To explain how it does it, we will express the function definition in the lambda calculus and use the rules of 
+reduction to show it. Initially, we express the individual functions as lambda functions and take n = two. Then, we give
+a more general explanation for n. 
+
+ f9 n = g
+        where
+        g f x = n p q r         
+                where              
+                p g h = h (g f)   
+                q u = x         
+                r u = u          
+
+r=lambda a. a, Application of r to u: r u = (lambda a)u=u
+q=lambda a. x, Application of q to u: q u = (lambda a. x) u = x
+p=lambda a. lambda b. b(af), Applying p to g h:
+
+pgh = (lambda a. lambda b. b(af))gh = (lambda b. b(gf))h = h(gf)
+
+Let n = two (in Church numeral), then 
+
+n = lambda z. lambda w. z (z w)
+
+If f is a function, then n f = lambda w. f(f w)   
+
+Using the definitions of the functions p, q, r, n, in terms of lambda calculus  
+
+g f x = n p q r = [lambda z. lambda w. z (z w)][lambda a. lambda b. b(af)][lambda a1. x] [lambda a2. a2] ->  
+
+ ->  [lambda w. [lambda a. lambda b. b(af)] ((lambda a. lambda b. b(af)) w)[lambda a1. x] [lambda a2. a2] -> /beta/ ->
+
+ ->  [lambda a. lambda b. b(af)] ((lambda a. lambda b. b(af)) (lambda a1. x)) [lambda a2. a2] -> /alpha/ ->
+
+ -> [[lambda a3. lambda b3. b3(a3 f)] ((lambda a. lambda b. b(af)) (lambda a1. x))] [lambda a2. a2] -> /beta/ ->
+
+ -> [[lambda a3. lambda b3. b3(a3 f)] (lambda b. b((lambda a1. x)f))] [lambda a2. a2] -> /beta/ -> 
+
+ -> [[lambda a3. lambda b3. b3(a3 f)] (lambda b. b x)] [lambda a2. a2] -> /beta/ -> 
+
+ -> [lambda b3. b3((lambda b. b x)f)] [lambda a2. a2] ->
+
+ -> [[lambda a2. a2]((lambda b. b x)f)] -> ((lambda b. b x)f) -> f x
+
+Thus, we have shown that gfx = fx. So, F9 two f x = g f x = fx. That is, the F9 is a decrement function on church numerals, when applied to the Church numerals (f9 two = one).   
+General case:
+
+For a general case of Church numeral n, we have the following denifition of Church numeral n in terms of the lambda
+calculus.
+
+n = lambda z. lambda w. z(z(...(z w)...)
+n f = lambda w. f(f(...(f w)...)
+n f x = (lambda w. f(f(...(f w)...)) x = f(f(...(f x)...)
+
+g f x = n p q r = (lambda z. lambda w. z(z(...(z w)...)) (lambda a. lambda b. b(af)) (lambda a. x)(lambda a. a)
+
+based on definitions of r, q, p and n.
+r=lambda a. a, Application of r to u: r u = (lambda a)u=u
+q=lambda a. x, Application of q to u: q u = (lambda a. x) u = x
+p=lambda a. lambda b. b(af)
+
+The general mechanism for the n p q r is such that n gets applied to p and p ends up repeated n times in the lambda 
+abstraction for n. Then the first p is applied to its argument, which is q. The result is q ends up in the lambda
+abstraction of the first p. It is worth noting that q has, as its argument, f and, when applied, f is dropped and 
+leaves us with x in the (lambda b1. b1 x) expression. When the next p (second in this case) is applied to this result,
+it moves into the placeholder c2 and we have ((lambda b1. b1 x) f) in the body of the lambda function defining second 
+p. This evaluates to (f x) and, from that moment on, the lambda function: lambda b. b (f(f x)) is the argument for the
+next p. This pattern is repeated and ends when n-1 applications of f: f(f(...(fx)...) is in the body of the last lambda function and r is its argument. 
+
+g f x -> lambda w. p(p(...(p w)...)) (lambda a1. x) (lambda a2. a2) ->
+ -> (p(p(...(p (lambda a1. x))...)(lambda a2. a2) -> /designate (n-2) p = p(p(p...p)...) application of p (n-2) times/ ->  
+ -> ((n-2) p) ((lambda c2. lambda b2. b2(c2 f))((lambda c1. lambda b1. b1(c1 f))(lambda a1. x))) (lambda a2. a2) -> 
+ -> ((n-2) p) ((lambda c2. lambda b2. b2(c2 f)) (lambda b1. b1((lambda a1. x) f)) (lambda a2. a2) ->
+ -> ((n-2) p) ((lambda c2. lambda b2. b2(c2 f)) (lambda b1. b1 x )) (lambda a2. a2) -> /loosing one f/-> 
+ -> ((n-2) p) (lambda b2. b2( (lambda b1. b1 x ) f)) (lambda a2. a2) ->
+ -> ((n-2) p) (lambda b2. b2 ( f x )) (lambda a2. a2) -> ...moving to the left ... ->
+ -> ((n-3) p) (lambda c3. lambda b3. b3 ( c3 f )) (lambda b2. b2 ( f x )) (lambda a2. a2) -> ... ->  
+ -> lambda c. lambda b. b (c f) (lambda b. b ((n-2) f x ))(lambda a2. a2) ->  
+ -> lambda b. b (f(...( f x )...)(lambda a2. a2) ->  (lambda a2. a2) f(f(...(f x)...) 
+
+
+
 Question 2.
+
+User Interface
+
+The user interface for Question 2 consists of 3 functions:
+
+- malloc 
+- free
+- gc_malloc (malloc with garbage collection)
+
+It is vital to note that a block addressable scheme is used for the sake of this simulation! Given this scheme, a block's address changes as blocks are removed from/inserted into the heap through splitting and coalescing. In terms of a byte-addressable scheme, the address stays the same. Although the code prevents pointers within the heap from breaking, it does not manage the root set or the pointers returned by malloc. Therefore, the root set must be managed by the user to ensure that root pointers do not break between calls to malloc/gc_malloc; this also applies to pointers returned by malloc.
+
+
+Usage Summary
+
+When a program starts running, all of the memory in the heap will exist in a single contiguous free block
+
+'initial_heap' represents a 1KB heap at the start of execution
+
+'malloc n_bytes initial_heap False' allocates 'n_bytes' on the heap 'initial_heap', the boolean flag 'False' tells malloc to output an error message if it's out of memory, instead of failing silently and returning a NULL pointer
+
+'free my_ptr my_heap' frees block with index 'my_ptr' on the heap 'my_heap'
+
+'gc_malloc n_bytes my_heap root_set' collects garbage, based on the 'root_set', if not enough memory available and allocates 'n_bytes' on the heap 'my_heap'
+
+
+Data Structures to Represent Heap and Blocks
 
 Each block has:
 
-- Clack's boundary tag
+- Header with an i-field, n-field and Clack's boundary tag
 
-- Data area
+- Data area (For simulation purposes, the data area only contains pointers to child blocks)
 
-Each free block holds in its data area a pointer to the header of the next free block in the free list (unless it is the last free block on the free list) – this means that there is a minimum size for the data area that is just big enough to hold a pointer
+Each free block holds in its data area a pointer to the next free block in the free list, so there is a minimum size for a block (by size of block we refer to the size of the data area) that is just big enough to hold a pointer (we simulate this to be 32 bits/4 bytes)
 
-Assume there is a maximum limit to the block size that can be requested, so we know how many bits are needed in the block header to represent that size. Sizes may be counted in terms of bytes or words – it is most convenient if the thing being counted is the same as what is meant by the argument n to malloc – assume we are counting bytes
+Sizes may be counted in terms of bytes or words – it is convenient if the thing being counted is the same as what is meant by the argument n to malloc. We assume we are counting bytes.
 
-4 bytes for i-field and n-field, and 4 bytes for Clack's boundary tag
+Our block header is 4 bytes for i-field (16 bit) and n-field (16 bit), and 4 bytes for Clack's boundary tag (Simulating 2 16 bit signed integers as per lectures)
 
 Assume a block header is:
 
- -  i-field and n-field
+ -  i-field, n-field
  -  live flag and size of previous block
  -  live flag and size of this block
 
 > header_size = 8
 
-A pointer is typically 4 bytes. Since here 0 is a valid memory address, so we can use -1 as the NULL pointer
-
-Note:
-
-Since we use a block's index in the heap as a 'pointer' for the sake of this simulation, a side effect of this is that a block's index changes as blocks are split and coalesce. However, in terms of a byte-addressable scheme, the given block has the same address.
+A pointer is typically 4 bytes. Since here 0 is a valid memory address/list index, so -1 is used as the NULL pointer
 
 > min_block_size = 4
 
+A heap is a list of blocks and a free-pointer
 
 > header ::= Header num num (bool, num) (bool, num)
 > children ::= Children [num]
 > block ::= Block header children
 > heap ::= Heap [block] num
+
+
+Code to Simulate Dynamic Memory Allocation
+
+Summary
+
+Ordering Policy: Address Ordering Policy is adopted because it tends to cluster live memory blocks at the lower end of memory, which is better for performance of virtual memory
+
+Allocation Policy: First fit policy is adopted because it is easiest to code. Although it tends to result in many small blocks at the start of the free list.
+
+Splitting: Free blocks are split to satisfy requests.
+
+Free list: A singly linked free list is used
+
+Coalescing: When a block is freed, coalescing with previous and next block is simulated using Clack's boundary tag mechanism.
+
+The code is self describing. Recall that the the only functions that are part of the UI in this section are malloc and free.
+The rest are utility functions 
 
 
 > replace :: num -> * -> [*] -> [*] 
@@ -297,7 +446,7 @@ Malloc takes a variable block size in bytes and a heap and returns a two-tuple o
 >    synchronize_block = sync my_block restructure_heap 
 
 
-Free frees memory according to an AO ordering policy, so the free block with the lowest address is considered first for allocation, which clusters live blocks at lower memory addresses thereby improving virtual memory performance
+Free frees memory according to an AO ordering policy
 
 > free :: num -> heap -> heap
 > free my_block (Heap blocks free_ptr) 
@@ -317,6 +466,12 @@ Free frees memory according to an AO ordering policy, so the free block with the
 
 
 Provide code to simulate the operation of a mark-scan garbage collector:
+
+Marking: Uses Pointer Reversal as it requires constant space, which is helpful for GC, as it runs when memory is very low
+Scanning: Standard scanning that runs when memory is low.
+
+The code is self describing. Recall that only gc_malloc is part of the UI. The rest of the functions are utility functions.
+
 
 > get_i :: num -> heap -> num
 > get_i my_block (Heap blocks free_ptr) 
@@ -410,6 +565,8 @@ Provide code to simulate the operation of a mark-scan garbage collector:
 > my_scan :: heap -> heap
 > my_scan (Heap blocks free_ptr) = xscan (empty_free_list (Heap blocks free_ptr)) 0
 
+
+GC Malloc takes a variable block size in bytes and a heap and returns a two-tuple of the new heap after allocation and the returned pointer into the new heap. It also takes a root set to perform GC when memory is low.
 
 > gc_malloc :: num -> heap -> [num] -> (heap, num)
 > gc_malloc n (Heap blocks free_ptr) root_set 
